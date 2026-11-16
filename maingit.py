@@ -21,6 +21,10 @@ MY_USER_ID = os.getenv("MY_USER_ID")
 DAILY_TIME = os.getenv("DAILY_TIME", "12:55")  # формат ЧЧ:ММ
 # ==========================================
 
+# === НАСТРОЙКИ КЛИКЕРА ===
+CLICKER_BOT = "@patrickstarsrobot"  # Впиши сюда бота, где кликер
+CLICKER_START_TIME = "2026-11-16 21:00" # Когда начать (по МСК)
+CLICKER_END_TIME = "2026-11-17 22:00"   # Когда закончить (по МСК)
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # === ФУНКЦИЯ НАЖАТИЯ КНОПКИ ===
@@ -900,6 +904,7 @@ async def main():
     asyncio.create_task(auto_parse_and_activate())
     asyncio.create_task(auto_daily())
     asyncio.create_task(auto_tasks_scheduler())
+    asyncio.create_task(auto_clicker())
     processed = {}
     print("🔄 Перехожу в режим пулинга...")
     while True:
@@ -987,3 +992,68 @@ if __name__ == "__main__":
         print("👋 Бот остановлен вручную")
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
+
+
+# === ЭКСПЕРИМЕНТ: КЛИКЕР ===
+async def auto_clicker():
+    MSK = timezone(timedelta(hours=3))
+    
+    try:
+        start_dt = datetime.strptime(CLICKER_START_TIME, "%Y-%m-%d %H:%M").replace(tzinfo=MSK)
+        end_dt = datetime.strptime(CLICKER_END_TIME, "%Y-%m-%d %H:%M").replace(tzinfo=MSK)
+    except Exception as e:
+        await client.send_message('me', f"❌ Ошибка в формате времени кликера: {e}")
+        return
+
+    await client.send_message('me', f"⏳ Кликер запущен. Эксперимент с {CLICKER_START_TIME} до {CLICKER_END_TIME} (каждые 10 мин).")
+    
+    success_count = 0
+    fail_count = 0
+
+    while True:
+        now = datetime.now(MSK)
+        
+        if now > end_dt:
+            await client.send_message('me', f"🛑 Эксперимент завершен!\n✅ Успешных: {success_count}\n❌ Неудачных: {fail_count}")
+            break
+            
+        if now < start_dt:
+            delay = (start_dt - now).total_seconds()
+            await asyncio.sleep(delay)
+            continue
+
+        print("🖱️ Попытка клика...")
+        try:
+            await client.send_message(CLICKER_BOT, "/start")
+            await asyncio.sleep(2)
+            
+            clicked = await click_button(CLICKER_BOT, "Кликер")
+            
+            if clicked:
+                await asyncio.sleep(3)
+                result_found = False
+                async for msg in client.iter_messages(CLICKER_BOT, limit=3):
+                    if msg.text:
+                        text_lower = msg.text.lower()
+                        if 'успешно' in text_lower or 'получил' in text_lower or 'начислено' in text_lower:
+                            success_count += 1
+                            await client.send_message('me', f"✅ Успешный клик! (Всего: {success_count})")
+                            result_found = True
+                            break
+                        elif 'подожди' in text_lower or 'рано' in text_lower or 'недоступно' in text_lower:
+                            fail_count += 1
+                            await client.send_message('me', f"⏳ Рано кликать. (Всего неудачных: {fail_count})")
+                            result_found = True
+                            break
+                
+                if not result_found:
+                    await client.send_message('me', "❓ Нажал, но бот не дал четкого ответа.")
+            else:
+                fail_count += 1
+                await client.send_message('me', "❌ Кнопка 'Кликер' не найдена.")
+                
+        except Exception as e:
+            await client.send_message('me', f"⚠️ Ошибка при клике: {e}")
+
+        # Ждем 10 минут
+        await asyncio.sleep(600)
