@@ -23,8 +23,8 @@ DAILY_TIME = os.getenv("DAILY_TIME", "12:55")  # формат ЧЧ:ММ
 
 # === НАСТРОЙКИ КЛИКЕРА ===
 CLICKER_BOT = "@patrickstarsrobot"  # Впиши сюда бота, где кликер
-CLICKER_START_TIME = "2026-11-16 21:00" # Когда начать (по МСК)
-CLICKER_END_TIME = "2026-11-17 22:00"   # Когда закончить (по МСК)
+CLICKER_START_TIME = "2026-11-16 21:15" # Когда начать (по МСК)
+CLICKER_END_TIME = "2026-11-17 22:15"   # Когда закончить (по МСК)
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # === ФУНКЦИЯ НАЖАТИЯ КНОПКИ ===
