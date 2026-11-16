@@ -996,6 +996,7 @@ if __name__ == "__main__":
 
 # === ЭКСПЕРИМЕНТ: КЛИКЕР ===
 async def auto_clicker():
+    await client.send_message('me', "🛠️ ТЕСТ: Функция кликера загрузилась и стартовала!")
     MSK = timezone(timedelta(hours=3))
     
     try:
