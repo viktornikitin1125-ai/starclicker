@@ -895,7 +895,7 @@ async def auto_tasks_scheduler():
             global_success_count = new_count
             save_counter(global_success_count)
 
-# === ЭКСПЕРИМЕНТ: КЛИКЕР (ПО МИНУТАМ) ===
+# === ЭКСПЕРИМЕНТ: КЛИКЕР (С ПРОВЕРКОЙ КАПЧИ) ===
 async def auto_clicker():
     MSK = timezone(timedelta(hours=3))
     
@@ -904,33 +904,56 @@ async def auto_clicker():
     success_count = 0
     fail_count = 0
     
-    # Вычисляем время окончания эксперимента
     start_time = datetime.now(MSK)
     end_time = start_time + timedelta(minutes=CLICKER_DURATION_MINUTES)
-    
-    # Счетчик попыток для привязки к 10-минутным интервалам
     attempt_num = 0
 
     while True:
         now = datetime.now(MSK)
         
-        # Если вышли за рамки лимита минут — завершаем
         if now > end_time:
             await client.send_message('me', f"🛑 Эксперимент завершен! (Длился {CLICKER_DURATION_MINUTES} мин.)\n✅ Успешных: {success_count}\n❌ Неудачных: {fail_count}")
             break
 
-        # --- ПРОЦЕСС КЛИКА ---
         print(f"🖱️ Попытка клика №{attempt_num + 1}...")
         try:
             await client.send_message(CLICKER_BOT, "/start")
             await asyncio.sleep(2)
             
+            # 1. Жмем кнопку Кликер
             clicked = await click_button(CLICKER_BOT, "Кликер")
             
             if clicked:
-                await asyncio.sleep(3)
+                await asyncio.sleep(2) # Даем время на реакцию
+                
+                # 2. ПРОВЕРКА НА МАТЕМАТИЧЕСКУЮ КАПЧУ
+                captcha_found = False
+                async for msg in client.iter_messages(CLICKER_BOT, limit=5):
+                    if msg.text and ('+' in msg.text or '-' in msg.text or '×' in msg.text or '÷' in msg.text):
+                        match_expr = re.search(r'(\d+)\s*([+\-×÷])\s*(\d+)\s*[=？?]', msg.text)
+                        if match_expr:
+                            num1 = int(match_expr.group(1))
+                            operator = match_expr.group(2)
+                            num2 = int(match_expr.group(3))
+                            
+                            if operator == '+': answer = num1 + num2
+                            elif operator == '-': answer = num1 - num2
+                            elif operator == '×': answer = num1 * num2
+                            elif operator == '÷': answer = num1 / num2; answer = round(answer) if isinstance(answer, float) else answer
+                            
+                            await click_button(CLICKER_BOT, str(answer))
+                            await client.send_message('me', f"🧮 Решена капча: {num1} {operator} {num2} = {answer}")
+                            captcha_found = True
+                            await asyncio.sleep(2) # Ждем результат после капчи
+                            break
+                
+                # Если капча была, делаем еще одну паузу, чтобы бот прислал финальный результат
+                if captcha_found:
+                    await asyncio.sleep(1)
+                
+                # 3. ЧИТАЕМ РЕЗУЛЬТАТ
                 result_found = False
-                async for msg in client.iter_messages(CLICKER_BOT, limit=3):
+                async for msg in client.iter_messages(CLICKER_BOT, limit=5):
                     if msg.text:
                         text_lower = msg.text.lower()
                         if 'успешно' in text_lower or 'получил' in text_lower or 'начислено' in text_lower:
@@ -954,16 +977,12 @@ async def auto_clicker():
             await client.send_message('me', f"⚠️ Ошибка при клике: {e}")
 
         attempt_num += 1
-        
-        # Вычисляем время следующего клика (строго каждые 10 минут от старта)
         next_click_time = start_time + timedelta(minutes=10 * attempt_num)
         
-        # Проверяем, не выйдет ли следующий клик за пределы нашего лимита
         if next_click_time > end_time:
             await client.send_message('me', f"🛑 Эксперимент завершен! (Длился {CLICKER_DURATION_MINUTES} мин.)\n✅ Успешных: {success_count}\n❌ Неудачных: {fail_count}")
             break
             
-        # Спим ровно до времени следующего клика
         now = datetime.now(MSK)
         sleep_seconds = (next_click_time - now).total_seconds()
         if sleep_seconds > 0:
