@@ -22,9 +22,9 @@ DAILY_TIME = os.getenv("DAILY_TIME", "12:55")  # формат ЧЧ:ММ
 # ==========================================
 
 # === НАСТРОЙКИ КЛИКЕРА ===
+# === НАСТРОЙКИ КЛИКЕРА ===
 CLICKER_BOT = "@patrickstarsrobot"  # Впиши сюда бота, где кликер
-CLICKER_START_TIME = "2026-11-16 21:30" # Когда начать (по МСК)
-CLICKER_END_TIME = "2026-11-17 22:30"   # Когда закончить (по МСК)
+CLICKER_DURATION_MINUTES = 60 # Сколько минут будет длиться эксперимент (120 = 2 часа)
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # === ФУНКЦИЯ НАЖАТИЯ КНОПКИ ===
@@ -895,36 +895,32 @@ async def auto_tasks_scheduler():
             global_success_count = new_count
             save_counter(global_success_count)
 
-# === ЭКСПЕРИМЕНТ: КЛИКЕР ===
+# === ЭКСПЕРИМЕНТ: КЛИКЕР (ПО МИНУТАМ) ===
 async def auto_clicker():
-    await client.send_message('me', "🛠️ ТЕСТ: Функция кликера загрузилась и стартовала!")
     MSK = timezone(timedelta(hours=3))
     
-    try:
-        start_dt = datetime.strptime(CLICKER_START_TIME, "%Y-%m-%d %H:%M").replace(tzinfo=MSK)
-        end_dt = datetime.strptime(CLICKER_END_TIME, "%Y-%m-%d %H:%M").replace(tzinfo=MSK)
-    except Exception as e:
-        await client.send_message('me', f"❌ Ошибка в формате времени кликера: {e}")
-        return
-
-    await client.send_message('me', f"⏳ Кликер запущен. Эксперимент с {CLICKER_START_TIME} до {CLICKER_END_TIME} (каждые 10 мин).")
+    await client.send_message('me', f"⏳ Кликер запущен. Эксперимент будет идти {CLICKER_DURATION_MINUTES} минут (каждые 10 мин).")
     
     success_count = 0
     fail_count = 0
+    
+    # Вычисляем время окончания эксперимента
+    start_time = datetime.now(MSK)
+    end_time = start_time + timedelta(minutes=CLICKER_DURATION_MINUTES)
+    
+    # Счетчик попыток для привязки к 10-минутным интервалам
+    attempt_num = 0
 
     while True:
         now = datetime.now(MSK)
         
-        if now > end_dt:
-            await client.send_message('me', f"🛑 Эксперимент завершен!\n✅ Успешных: {success_count}\n❌ Неудачных: {fail_count}")
+        # Если вышли за рамки лимита минут — завершаем
+        if now > end_time:
+            await client.send_message('me', f"🛑 Эксперимент завершен! (Длился {CLICKER_DURATION_MINUTES} мин.)\n✅ Успешных: {success_count}\n❌ Неудачных: {fail_count}")
             break
-            
-        if now < start_dt:
-            delay = (start_dt - now).total_seconds()
-            await asyncio.sleep(delay)
-            continue
 
-        print("🖱️ Попытка клика...")
+        # --- ПРОЦЕСС КЛИКА ---
+        print(f"🖱️ Попытка клика №{attempt_num + 1}...")
         try:
             await client.send_message(CLICKER_BOT, "/start")
             await asyncio.sleep(2)
@@ -957,8 +953,22 @@ async def auto_clicker():
         except Exception as e:
             await client.send_message('me', f"⚠️ Ошибка при клике: {e}")
 
-        # Ждем 10 минут
-        await asyncio.sleep(600)
+        attempt_num += 1
+        
+        # Вычисляем время следующего клика (строго каждые 10 минут от старта)
+        next_click_time = start_time + timedelta(minutes=10 * attempt_num)
+        
+        # Проверяем, не выйдет ли следующий клик за пределы нашего лимита
+        if next_click_time > end_time:
+            await client.send_message('me', f"🛑 Эксперимент завершен! (Длился {CLICKER_DURATION_MINUTES} мин.)\n✅ Успешных: {success_count}\n❌ Неудачных: {fail_count}")
+            break
+            
+        # Спим ровно до времени следующего клика
+        now = datetime.now(MSK)
+        sleep_seconds = (next_click_time - now).total_seconds()
+        if sleep_seconds > 0:
+            print(f"💤 Ожидание {sleep_seconds:.0f} сек до следующего клика...")
+            await asyncio.sleep(sleep_seconds)
 
 # === ОСНОВНАЯ ФУНКЦИЯ С ПУЛИНГОМ ===
 async def main():
